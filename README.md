@@ -7,5 +7,5 @@ This is the repository for MSIA 400 HW and Lab Assignments
   * [Lab1 Answer in PDF](https://github.com/chuandu2/MSIA400/blob/master/Lab-Assignment-1/400_Lab1_ChuanDu.pdf)
 
 * 2018-11-10: Lab Assignment 2
- * [Lab2 Answer in Rmd](https://github.com/chuandu2/MSIA400/blob/master/Lab-Assignment-2/400_Lab2.Rmd)
- * [Lab2 Answer in PDF](https://github.com/chuandu2/MSIA400/blob/master/Lab-Assignment-2/400_Lab2_SophieDU.pdf)
+  * [Lab2 Answer in Rmd](https://github.com/chuandu2/MSIA400/blob/master/Lab-Assignment-2/400_Lab2.Rmd)
+  * [Lab2 Answer in PDF](https://github.com/chuandu2/MSIA400/blob/master/Lab-Assignment-2/400_Lab2_SophieDU.pdf)
