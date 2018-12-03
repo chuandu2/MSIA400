@@ -12,4 +12,4 @@ This is the repository for MSIA 400 HW and Lab Assignments
 
 * 2018-12-03: Lab Assignment 3
   * [Lab3 Answer in Rmd](https://github.com/chuandu2/MSIA400/blob/master/Lab-Assignment-3/400_Lab3.Rmd)
-  * [Lab3 Answer in PDF](https://github.com/chuandu2/MSIA400/blob/master/Lab-Assignment-3/400_Lab3_SophieDU.pdf)
+  * [Lab3 Answer in PDF](https://github.com/chuandu2/MSIA400/blob/master/Lab-Assignment-3/400_Lab3.pdf)
