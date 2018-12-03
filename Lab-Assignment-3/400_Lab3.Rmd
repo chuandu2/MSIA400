@@ -1,0 +1,114 @@
+---
+title: "400_Lab3"
+author: "Chuan Du (Sophie)"
+date: "12/3/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### Problem 1
+
+##### Part a
+
+**Answer: ** The purpose of doing Markov Chain Monte Carlo (MCMC) is to obtain sample points from complex distribution that is difficult to sample from directly. By constructing a Markov Chain whose stationary distribution is exactly equal to our target distribution, we use MCMC to generate random samples from the target distribution.
+
+##### Part b
+
+**Answer: ** The Metropolis Algorithm is a special case of the Metropolis Hashings Algorithm. In the Metropolis Algorithm, the proposal distribution $q(.|.)$ has to be symmetric where $q(\theta_1 | \theta_2) = q(\theta_2 | \theta_1)$, while in the Metropolis Hashings Algorithm, $q(.|.)$ does not have to be symmetric.
+
+##### Part c
+
+**Answer: ** The purpose of both Ridge regression and LASSO regression is to avoid multicollinarity, too many predictors and ill-conditioned $X^T X$. Both of them add shrinkage penalty to shrink the coefficients toward 0. LASSO regression also helps with variable selection (reduces variables).
+
+##### Part d
+
+**Answer: ** The Independence of irrelevant alternatives (IIA) assumption for Multinomial Logit discrete choice model is that the ratio of the probabilities of choosing two alternatives is independent of the presence or attributes of any other alternative. 
+
+
+#### Problem 2
+
+```{r}
+#load data
+gas = read.csv("gas_mileage.csv", header = T); head(gas, 5)
+```
+
+##### Part a
+
+```{r}
+library(quantreg)
+```
+
+
+```{r, warning=FALSE}
+#fit quantile regression model
+fit1 = rq(Mpg ~ ., tau = seq(0.05, 0.95, by = 0.05), data = gas)
+summary(fit1)
+```
+
+
+##### Part b
+
+```{r}
+plot(fit1, mfrow = c(2, 2))
+```
+
+
+##### Part c
+
+**Answer: **
+
+1. Hpower: in lower quantiles (0.05th to around 0.57th), a unit increase in displacement will lead to 0.2 unit decrease in Mpg, while in middle - upper quantiles (around 0.65th to 0.77th), a unit increase in displacement will lead to an increase in Mpg.
+
+2. Carb_barrels: in quantiles 0.05th to around 0.69th, a unit increase in carb_barrels will lead to an increase in Mpg, while in quantiles 0.7th to 0.76th, a unit increase in crab_barrels will lead to decrease in Mpg, and in upper quantiles (around 0.78th to 0.95th), a unit increase in carb_barrels will lead to no change in Mpg.
+
+3. Weight: in lower quantiles (0.05th to around 0.79th), a unit increase in weight will lead to an decrease in Mpg, while in upper quantiles (0.8th to 0.95th), a unit increase in weight will lead to an increase in Mpg, though the change is slight.
+
+
+##### Part d
+
+```{r}
+#use bootstrap for se of regression coeffs for conditional median
+fit1_median = rq(Mpg ~ ., tau = 0.5, data = gas)
+summary(fit1_median, se = "boot")
+```
+
+
+#### Problem 3
+
+```{r}
+#load data
+car = read.csv("car.csv", header = TRUE); head(car, 5)
+```
+
+##### Part a
+
+```{r}
+library(e1071)
+```
+
+```{r}
+fit2 = svm(factor(y) ~ ., data = car)
+summary(fit2)
+```
+
+
+##### Part b
+
+```{r}
+plot(fit2, data = car, income ~ car_age) #from income to car_age
+```
+
+
+##### Part c
+
+```{r}
+#create new data
+new_obs = with(car, data.frame(income = 50, car_age = 5))
+#predict response
+new_obs$class = predict(fit2, new_obs, type = "response"); new_obs
+```
+
+**Answer: ** Based on the prediction result shown above, we could see that the person with income = 50 and car_age = 5 has response = 1, i.e. this person will buy the car.
