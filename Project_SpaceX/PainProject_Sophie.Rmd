@@ -1,99 +1,88 @@
 ---
-title: "400_Project"
-author: "Chuan Du (Sophie)"
-date: "11/13/2018"
-output: html_document
+title: "Pain_Analysis"
+author: "Team SpaceX"
+date: "12/14/2018"
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-### Load Data
-
+# Load libraries
 ```{r}
-#read in data
-raw = read.csv('SurgicalRegistry.csv')
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(readr)
+library(caret)
+library(randomForest)
+library(glmnet)
+library(nnet)
+library(MASS)
 ```
 
-### Data Cleansing
 
+## DATA EXPLORATION AND CLEANSING
 ```{r}
-# replace all 999 and 777 with NA
-raw[raw == 999 | raw == 777] <- NA
-
+##here::here("SurgicalRegistry.csv")
+raw <- read.csv("SurgicalRegistry.csv")
+raw[raw==999 | raw == 777] <- NA
 # change columns to factors
-colsFactors <- c("PatientGender", "PatientRace", "Genetics", "WhatSurgery", "Surgeon")
-raw[colsFactors] <- lapply(raw[colsFactors], as.factor)
-
+colsFactors <- c("PatientGender", "PatientRace", "Genetics", "WhatSurgery","Surgeon")
+raw[colsFactors] <- lapply(raw[colsFactors], as.factor) 
 #Remove patients who haven't had surgery
-raw <- raw[-c(12,14),]
-
+raw <- raw[-c(12,14,43,46),]
 #change scale of predictive scores to match reported scores (out of 10)
 raw$PatientPredictive <- raw$PatientPredictive/10
 raw$ParentPredictive <- raw$ParentPredictive/10
 ```
 
-```{r}
-#select column names
-pain = raw[,c("Genetics","PatientGender","PatientAge","PatientWeight","PatientRace","WhatSurgery","SurgeryHX","DODPostOpDay","PatientPredictive","ParentPredictive","Hrs0_12MeanPainScore","Hrs13_24MeanPainScore","Hrs25_36MeanPainScore","Hrs37_48MeanPainScore","Hrs49_60MeanPainScore","Hrs61_72MeanPainScore","Hrs73_84MeanPainScore","Hrs85_96MeanPainScore","Hrs0_12MaxPainScore","Hrs13_24MaxPainScore","Hrs25_36MaxPainScore","Hrs37_48MaxPainScore","Hrs49_60MaxPainScore","Hrs61_72MaxPainScore","Hrs73_84MaxPainScore","Hrs85_96MaxPainScore","Hrs0_12TMorphEquiv","Hrs13_24TMorphEquiv","Hrs25_36TMorphEquiv","Hrs37_48TMorphEquiv","Hrs49_60TMorphEquiv","Hrs61_72TMorphEquiv","Hrs73_84TMorphEquiv","Hrs85_96TMorphEquiv")]
-```
 
+#create analysis data set
 ```{r}
+pain = raw[,c("PatientID","Genetics","PatientGender","Surgeon","PatientAge","PatientWeight","PatientRace","WhatSurgery","SurgeryHX","DODPostOpDay","PatientPredictive","ParentPredictive","Hrs0_12MeanPainScore","Hrs13_24MeanPainScore","Hrs25_36MeanPainScore","Hrs37_48MeanPainScore","Hrs49_60MeanPainScore","Hrs61_72MeanPainScore","Hrs73_84MeanPainScore","Hrs85_96MeanPainScore","Hrs0_12MaxPainScore","Hrs13_24MaxPainScore","Hrs25_36MaxPainScore","Hrs37_48MaxPainScore","Hrs49_60MaxPainScore","Hrs61_72MaxPainScore","Hrs73_84MaxPainScore","Hrs85_96MaxPainScore","Hrs0_12TMorphEquiv","Hrs13_24TMorphEquiv","Hrs25_36TMorphEquiv","Hrs37_48TMorphEquiv","Hrs49_60TMorphEquiv","Hrs61_72TMorphEquiv","Hrs73_84TMorphEquiv","Hrs85_96TMorphEquiv")]
 # Replace PatientID 502, 525, 531's self PredicScorest with Median
 ## because their original value are 808 and 859; PatientID 502 has missing value
 pain$PatientPredictive[2] <- median(pain$PatientPredictive[-c(22,28)], na.rm=TRUE)
 pain$PatientPredictive[22] <- median(pain$PatientPredictive[-c(22,28)], na.rm=TRUE)
 pain$PatientPredictive[28] <- median(pain$PatientPredictive[-c(22,28)], na.rm=TRUE)
-
 # Replace PatientID 502's Parent PredicScore with Median
 pain$ParentPredictive[2] <- median(pain$ParentPredictive, na.rm=TRUE)
-```
-
-```{r}
 # Replace missing value in MeanPainScore using MeanPainScore from other time windows
 pain[8,]$Hrs13_24MeanPainScore <- mean(c(pain[8,]$Hrs0_12MeanPainScore, pain[8,]$Hrs25_36MeanPainScore))
-
 pain[46,]$Hrs13_24MeanPainScore <- mean(c(pain[46,]$Hrs0_12MeanPainScore,pain[46,]$Hrs25_36MeanPainScore))
 pain[31,]$Hrs73_84MeanPainScore <-mean(c(pain[31,]$Hrs61_72MeanPainScore,pain[31,]$Hrs85_96MeanPainScore))
-
 ##[16,] Hrs85_96.OfPainScore = 0
 pain[16,]$Hrs85_96MeanPainScore <- 0
-
 ##[22,]Hrs73_84.OfPainScores = 0
 pain[22,]$Hrs85_96MeanPainScore <- 0
 pain[22,]$Hrs73_84MeanPainScore <- 0
-
 pain[61,]$Hrs61_72MeanPainScore <- pain[61,]$Hrs49_60MeanPainScore - 1/3 *(pain[61,]$Hrs49_60MeanPainScore - pain[61,]$Hrs85_96MeanPainScore)
 pain[61,]$Hrs73_84MeanPainScore <-pain[61,]$Hrs49_60MeanPainScore - 2/3 *(pain[61,]$Hrs49_60MeanPainScore - pain[61,]$Hrs85_96MeanPainScore)
-
 # Replace missing value in MaxPainScore primarily using MaxPainScore from other time windows
-
 pain[8,]$Hrs13_24MaxPainScore <- mean(c(pain[8,]$Hrs0_12MaxPainScore, pain[8,]$Hrs25_36MaxPainScore))
-
 pain[31,]$Hrs73_84MaxPainScore <- mean(c(pain[31,]$Hrs61_72MaxPainScore, pain[31,]$Hrs85_96MaxPainScore))
-
 ##[16,] Hrs85_96.OfPainScore = 0
 pain[16,]$Hrs85_96MaxPainScore <- 0
-
 ##[22,]Hrs73_84.OfPainScores = 0
 pain[22,]$Hrs73_84MaxPainScore <- 0
 pain[22,]$Hrs85_96MaxPainScore <- 0
-
-
 ## pain[8,]$Hrs49_60MaxPainScore = Hrs85_96MaxPainScore =1
 pain[61,]$Hrs61_72MaxPainScore <- 1
 pain[61,]$Hrs73_84MaxPainScore <- 1
-
 ## pain[24,]$Hrs85_96MinPainScore = Hrs85_96MeanPainScore =3
 pain[24,]$Hrs85_96MaxPainScore <- 3
+pain$PatientPredictive[pain$PatientPredictive > 10] = pain$PatientPredictive[pain$PatientPredictive > 10]/10
+pain$PatientPredictive[pain$ParentPredictive > 10] = pain$PatientPredictive[pain$ParentPredictive > 10]/10
+```
 
-# Remove patient ID 43 46
-## empty Pain Score data
-pain <- pain [-c(41,44),]
 
 #change pain scores to change over previous value
 
+```{r}
 # create relative mean pain score change
 pain$Hrs0_12MeanPainScore_change <- 0
 pain$Hrs13_24MeanPainScore_change <- pain$Hrs13_24MeanPainScore - pain$Hrs0_12MeanPainScore
@@ -103,7 +92,6 @@ pain$Hrs49_60MeanPainScore_change <- pain$Hrs49_60MeanPainScore - pain$Hrs37_48M
 pain$Hrs61_72MeanPainScore_change <- pain$Hrs61_72MeanPainScore - pain$Hrs49_60MeanPainScore  
 pain$Hrs73_84MeanPainScore_change <- pain$Hrs73_84MeanPainScore - pain$Hrs61_72MeanPainScore  
 pain$Hrs85_96MeanPainScore_change <- pain$Hrs85_96MeanPainScore - pain$Hrs73_84MeanPainScore  
-
 # create relative max pain score change
 pain$Hrs0_12MaxPainScore_change <- 0
 pain$Hrs13_24MaxPainScore_change <- pain$Hrs13_24MaxPainScore - pain$Hrs0_12MaxPainScore
@@ -113,7 +101,6 @@ pain$Hrs49_60MaxPainScore_change <- pain$Hrs49_60MaxPainScore - pain$Hrs37_48Max
 pain$Hrs61_72MaxPainScore_change <- pain$Hrs61_72MaxPainScore - pain$Hrs49_60MaxPainScore  
 pain$Hrs73_84MaxPainScore_change <- pain$Hrs73_84MaxPainScore - pain$Hrs61_72MaxPainScore  
 pain$Hrs85_96MaxPainScore_change <- pain$Hrs85_96MaxPainScore - pain$Hrs73_84MaxPainScore
-
 # create relative morphine change
 pain$Hrs0_12TMorphEquiv_change <- 0
 pain$Hrs13_24TMorphEquiv_change <- pain$Hrs13_24TMorphEquiv - pain$Hrs0_12TMorphEquiv
@@ -123,33 +110,381 @@ pain$Hrs49_60TMorphEquiv_change <- pain$Hrs49_60TMorphEquiv - pain$Hrs37_48TMorp
 pain$Hrs61_72TMorphEquiv_change <- pain$Hrs61_72TMorphEquiv - pain$Hrs49_60TMorphEquiv  
 pain$Hrs73_84TMorphEquiv_change <- pain$Hrs73_84TMorphEquiv - pain$Hrs61_72TMorphEquiv  
 pain$Hrs85_96TMorphEquiv_change <- pain$Hrs85_96TMorphEquiv - pain$Hrs73_84TMorphEquiv
-
-# Average change in pain score per patient
-pain_change_times1 <- c( "Hrs13_24MeanPainScore_change","Hrs25_36MeanPainScore_change","Hrs37_48MeanPainScore_change","Hrs49_60MeanPainScore_change", "Hrs61_72MeanPainScore_change","Hrs73_84MeanPainScore_change","Hrs85_96MeanPainScore_change")
-
-pain$mean_change_MeanPainScore <- apply(pain[pain_change_times1], 1, mean, na.rm=TRUE)
-
-
-# ABS change in pain score per patient
-pain$mean_absChange_MeanPainScore <- apply(pain[pain_change_times1], 1, function(x) mean(abs(x),na.rm = T))
-
 ```
 
 ```{r}
-library(readr)
-library(ISLR)
-library(class)
-library(caret)
-library(FNN)
-library(randomForest)
-library(glmnet)
-library(e1071)
-library(nnet)
-library(MASS)
-library(survival)
+# Average change in pain score per patient
+pain_change_times1 <- c( "Hrs13_24MeanPainScore_change","Hrs25_36MeanPainScore_change","Hrs37_48MeanPainScore_change","Hrs49_60MeanPainScore_change", "Hrs61_72MeanPainScore_change","Hrs73_84MeanPainScore_change","Hrs85_96MeanPainScore_change")
+pain$mean_change_MeanPainScore <- apply(pain[pain_change_times1], 1, mean, na.rm=TRUE)
+# ABS change in pain score per patient
+pain$mean_absChange_MeanPainScore <- apply(pain[pain_change_times1], 1, function(x) mean(abs(x),na.rm = T))
+```
+
+# create vector of time windows to be used in plots
+```{r}
+times <- c("0-12","13-24","25-36","37-48","49-60","61-72","73-84","85-96")
+pain_change_times <- c("Hrs0_12MeanPainScore_change", "Hrs13_24MeanPainScore_change","Hrs25_36MeanPainScore_change","Hrs37_48MeanPainScore_change","Hrs49_60MeanPainScore_change", "Hrs61_72MeanPainScore_change","Hrs73_84MeanPainScore_change","Hrs85_96MeanPainScore_change")
+yl <- "Mean Pain Score Change Over Previous 12 Hours"
+xl <- "Time Window (Hrs)"
+```
+
+# Mean pain times for each 12 hour window
+```{r}
+mean_pain_time <-colMeans(pain[pain_change_times],na.rm = T)
+plot(mean_pain_time,ylab = yl, xlab = xl, xaxt='n',pch=19)
+lines(mean_pain_time,col='red')
+axis(side=1,at = 1:8, labels=times)
+## the largest average difference in pain score over the previous period is in hours 49-60, as there is a relatively large spike in pain difference over the previous 12 hours
+```
+
+# Mean pain times for each 12 hour window: Gender
+```{r}
+mean_pain_time_M <-colMeans(pain[pain$PatientGender==1,pain_change_times],na.rm = T)
+mean_pain_time_F <-colMeans(pain[pain$PatientGender==2,pain_change_times],na.rm = T)
+plot(mean_pain_time_M, col='blue', type='l', ylab = yl, xlab = xl, xaxt='n',ylim = c(-.3,.5) )
+lines(mean_pain_time_F, col='magenta')
+axis(side=1,at = 1:8, labels=times)
+legend(1, .4, legend=c("Male", "Female"),
+       fill=c("blue", "magenta"),cex=0.8)
+## Males and females follow roughly teh same trend in terms of reported difference in pain score over time until after the 60th hour post surgery, when males show a considerable drop in pain scores and females have roughly the same pain over the next 24 hours.  
+```
+
+# Mean pain times for each 12 hour window: Race
+```{r}
+mean_pain_time_Wh <-colMeans(pain[pain$PatientRace==1,pain_change_times],na.rm = T)
+mean_pain_time_Oth <-colMeans(pain[pain$PatientRace!=1,pain_change_times],na.rm = T)
+plot(mean_pain_time_Wh, col='black', type='l',ylim = c(-1,1), ylab=yl, xlab=xl, xaxt='n')
+lines(mean_pain_time_Oth, col='red')
+axis(side=1,at = 1:8, labels=times)
+legend(1, 1, legend=c("White", "Other"),fill=c("black", "red"),cex=0.8)
+# Patients with White race report a more steady change in pain scores over the previous period, whereas non white patients have more variance in the reported pain scores compared to the previous 12 hour window
+ 
+```
+
+# Mean pain times for each 12 hour window: Surgeon
+```{r}
+mean_pain_time_Sg1 <-colMeans(pain[pain$Surgeon==1,pain_change_times],na.rm = T)
+mean_pain_time_Sg2 <-colMeans(pain[pain$Surgeon==2,pain_change_times],na.rm = T)
+mean_pain_time_SgOth <-colMeans(pain[pain$Surgeon!=2 & pain$Surgeon!=1 ,pain_change_times],na.rm = T)
+plot(mean_pain_time_Sg1, col='black', type='l',ylim = c(-1,1), ylab=yl, xlab=xl, xaxt='n')
+lines(mean_pain_time_Sg2, col='red')
+lines(mean_pain_time_SgOth, col='green')
+axis(side=1,at = 1:8, labels=times)
+legend(1, 1, legend=c("Thomson", "Lee","Other Surgeon"),fill=c("black", "red","green"),cex=0.8)
+## those who were operated on by Thomson show a large spike in pain after 2 days (48 hours).  Those operated by Lee show an overall flatter trend compared to Thomson, but the pain difference over the previous period seems t be higher after 3 days (72 hr)
+```
+
+# Mean pain times for each 12 hour window: Surgery
+```{r}
+mean_pain_time_Nuss <-colMeans(pain[pain$WhatSurgery==1,pain_change_times],na.rm = T)
+mean_pain_time_Spine <-colMeans(pain[pain$WhatSurgery==2,pain_change_times],na.rm = T)
+plot(mean_pain_time_Nuss, col='black', type='l',ylim = c(-1,1),ylab=yl, xlab=xl, xaxt='n')
+lines(mean_pain_time_Spine, col='red')
+axis(side=1,at = 1:8, labels=times)
+legend(1, 1, legend=c("Chest","Spine"),fill=c("black", "red"),cex=0.8)
+# not a large difference in pain difference between the spine and chest surgery patients, as each surgery type experiences higher pain differences over different time windows
+```
+# Mean pain times for each 12 hour window: Surgery History
+```{r}
+mean_pain_time_Surg <-colMeans(pain[pain$SurgeryHX==1,pain_change_times],na.rm = T)
+mean_pain_time_NoSurg <-colMeans(pain[pain$SurgeryHX==0,pain_change_times],na.rm = T)
+plot(mean_pain_time_Surg, col='black', type='l',ylim = c(-1,1),ylab=yl, xlab=xl, xaxt='n')
+lines(mean_pain_time_NoSurg, col='red')
+axis(side=1,at = 1:8, labels=times)
+legend(1, 1, legend=c("Surgery History","No Surgery History"),fill=c("black", "red"),cex=0.8)
+# patients with surgery history report a significant drop in pain over teh first 24 hours compared to those without surgery history.  However, after 2 full day, the trends between the two groups are roughly the same
+```
+# correlate morphine dose with pain score overtime
+```{r}
+## create data frame to show correlation between pain scored difference and morphine dosage difference for each time window
+pain_cor_df <-pain[,grepl( "(Hrs[0-9]+_[0-9]+MeanPainScore_change)|(Hrs[0-9]+_[0-9]+TMorphEquiv_change)",names(pain))]
+pain_cor_matrix <- cor(pain_cor_df,use="pairwise.complete.obs")
+pain_cor_matrix <- pain_cor_matrix[2:8,10:16]
+# create dataset for morphone correlation matrix in tableau
+write.csv(pain_cor_matrix,file = "morph.csv")
+# there is very low correlation between reported difference in pain scores over the previous period and difference in Morphone dosage over teh previous period across all time windows
+```
+
+## T-TESTS AND CORRELATION TESTS ##
+
+#Analysis: Hours 0-12
+
+##Gender
+
+```{r}
+p1 <- ggplot(pain, aes(PatientGender, Hrs0_12MeanPainScore)) + geom_boxplot()
+p1
+t.test(Hrs0_12MeanPainScore ~ PatientGender, pain)
+```
+
+##Age
+
+```{r}
+p2 <- ggplot(pain, aes(PatientAge, Hrs0_12MeanPainScore)) + geom_point() + geom_smooth()
+p2
+cor.test(pain$PatientAge, pain$Hrs0_12MeanPainScore, method = "pearson")
+```
+
+##Weight
+
+```{r}
+p3 <- ggplot(pain, aes(PatientWeight, Hrs0_12MeanPainScore)) + geom_point() + geom_smooth()
+p3
+cor.test(pain$PatientWeight, pain$Hrs0_12MeanPainScore, method = "pearson")
+```
+
+##Race
+
+```{r}
+p4 <- ggplot(pain, aes(PatientRace, Hrs0_12MeanPainScore)) + geom_boxplot()
+p4
+t4 <- pain %>%
+  group_by(PatientRace) %>%
+  summarise(Hrs0_12MeanPainScore = mean(Hrs0_12MeanPainScore, na.rm=TRUE), count=n())
+print(t4)
+```
+
+##Genetic Testing
+
+```{r}
+p5 <- ggplot(pain, aes(Genetics, Hrs0_12MeanPainScore)) + geom_boxplot()
+p5
+t.test(Hrs0_12MeanPainScore ~ Genetics, pain)
+```
+
+##What Surgery
+
+```{r}
+p6 <- ggplot(pain, aes(WhatSurgery, Hrs0_12MeanPainScore)) + geom_boxplot()
+p6
+t.test(Hrs0_12MeanPainScore ~ WhatSurgery, pain)
+```
+
+##SurgeryHX
+
+```{r}
+p7 <- ggplot(pain, aes(SurgeryHX, Hrs0_12MeanPainScore)) + geom_boxplot()
+p7
+t.test(Hrs0_12MeanPainScore ~ SurgeryHX, pain)
+```
+
+##PatientPredictive
+
+```{r}
+p9 <- ggplot(pain, aes(PatientPredictive, Hrs0_12MeanPainScore)) + geom_point() + geom_smooth()
+p9
+cor.test(pain$PatientPredictive, pain$Hrs0_12MeanPainScore, method = "pearson")
+```
+
+##ParentPredictive
+
+```{r}
+p10 <- ggplot(pain, aes(ParentPredictive, Hrs0_12MeanPainScore)) + geom_point() + geom_smooth()
+p10
+cor.test(pain$ParentPredictive, pain$Hrs0_12MeanPainScore, method = "pearson")
 ```
 
 
+
+
+#Analysis: Mean Change
+
+##Gender
+
+```{r}
+p1 <- ggplot(pain, aes(PatientGender, mean_change_MeanPainScore)) + geom_boxplot()
+p1
+t.test(mean_change_MeanPainScore ~ PatientGender, pain)
+```
+
+##Age
+
+```{r}
+p2 <- ggplot(pain, aes(PatientAge, mean_change_MeanPainScore)) + geom_point() + geom_smooth()
+p2
+cor.test(pain$PatientAge, pain$mean_change_MeanPainScore, method = "pearson")
+```
+
+##Weight
+
+```{r}
+p3 <- ggplot(pain, aes(PatientWeight, mean_change_MeanPainScore)) + geom_point() + geom_smooth()
+p3
+cor.test(pain$PatientWeight, pain$mean_change_MeanPainScore, method = "pearson")
+```
+
+##Race
+
+```{r}
+p4 <- ggplot(pain, aes(PatientRace, mean_change_MeanPainScore)) + geom_boxplot()
+p4
+t4 <- pain %>%
+  group_by(PatientRace) %>%
+  summarise(mean_change_MeanPainScore = mean(mean_change_MeanPainScore, na.rm=TRUE), count=n())
+print(t4)
+```
+
+##Genetic Testing
+
+```{r}
+p5 <- ggplot(pain, aes(Genetics, mean_change_MeanPainScore)) + geom_boxplot()
+p5
+t.test(mean_change_MeanPainScore ~ Genetics, pain)
+```
+
+##What Surgery
+
+```{r}
+p6 <- ggplot(pain, aes(WhatSurgery, mean_change_MeanPainScore)) + geom_boxplot()
+p6
+t.test(mean_change_MeanPainScore ~ WhatSurgery, pain)
+```
+
+##SurgeryHX
+
+```{r}
+p7 <- ggplot(pain, aes(SurgeryHX, mean_change_MeanPainScore)) + geom_boxplot()
+p7
+t.test(mean_change_MeanPainScore ~ SurgeryHX, pain)
+```
+
+##PatientPredictive
+
+```{r}
+p9 <- ggplot(pain, aes(PatientPredictive, mean_change_MeanPainScore)) + geom_point() + geom_smooth()
+p9
+cor.test(pain$PatientPredictive, pain$mean_change_MeanPainScore, method = "pearson")
+```
+
+##ParentPredictive
+
+```{r}
+p10 <- ggplot(pain, aes(ParentPredictive, mean_change_MeanPainScore)) + geom_point() + geom_smooth()
+p10
+cor.test(pain$ParentPredictive, pain$mean_change_MeanPainScore, method = "pearson")
+```
+
+
+
+#Analysis: Absolute Value Change
+
+##Gender
+
+```{r}
+p1 <- ggplot(pain, aes(PatientGender, mean_absChange_MeanPainScore)) + geom_boxplot()
+p1
+t.test(mean_absChange_MeanPainScore ~ PatientGender, pain)
+```
+
+##Age
+
+```{r}
+p2 <- ggplot(pain, aes(PatientAge, mean_absChange_MeanPainScore)) + geom_point() + geom_smooth()
+p2
+cor.test(pain$PatientAge, pain$mean_absChange_MeanPainScore, method = "pearson")
+```
+
+##Weight
+
+```{r}
+p3 <- ggplot(pain, aes(PatientWeight, mean_absChange_MeanPainScore)) + geom_point() + geom_smooth()
+p3
+cor.test(pain$PatientWeight, pain$mean_absChange_MeanPainScore, method = "pearson")
+```
+
+##Race
+
+```{r}
+p4 <- ggplot(pain, aes(PatientRace, mean_absChange_MeanPainScore)) + geom_boxplot()
+p4
+t4 <- pain %>%
+  group_by(PatientRace) %>%
+  summarise(mean_absChange_MeanPainScore = mean(mean_absChange_MeanPainScore, na.rm=TRUE), count=n())
+print(t4)
+```
+
+##Genetic Testing
+
+```{r}
+p5 <- ggplot(pain, aes(Genetics, mean_absChange_MeanPainScore)) + geom_boxplot()
+p5
+t.test(mean_absChange_MeanPainScore ~ Genetics, pain)
+```
+
+##What Surgery
+
+```{r}
+p6 <- ggplot(pain, aes(WhatSurgery, mean_absChange_MeanPainScore)) + geom_boxplot()
+p6
+t.test(mean_absChange_MeanPainScore ~ WhatSurgery, pain)
+```
+
+Closest. p = 0.0815
+
+##SurgeryHX
+
+```{r}
+p7 <- ggplot(pain, aes(SurgeryHX, mean_absChange_MeanPainScore)) + geom_boxplot()
+p7
+t.test(mean_absChange_MeanPainScore ~ SurgeryHX, pain)
+```
+
+##PatientPredictive
+
+```{r}
+p9 <- ggplot(pain, aes(PatientPredictive, mean_absChange_MeanPainScore)) + geom_point() + geom_smooth()
+p9
+cor.test(pain$PatientPredictive, pain$mean_absChange_MeanPainScore, method = "pearson")
+```
+
+##ParentPredictive
+
+```{r}
+p10 <- ggplot(pain, aes(ParentPredictive, mean_absChange_MeanPainScore)) + geom_point() + geom_smooth()
+p10
+cor.test(pain$ParentPredictive, pain$mean_absChange_MeanPainScore, method = "pearson")
+```
+
+
+## MODELS ##
+
+##  K Means Cluster
+```{r}
+# repalce NA with median
+var_NA = c(names(pain)[37:44])
+for(i in var_NA){
+  pain[i][is.na(pain[i])] = median(as.numeric(unlist(pain[i])), na.rm = T)
+}
+p_diff = pain[,c("PatientGender","PatientAge","PatientWeight","WhatSurgery","PatientRace","Surgeon","PatientPredictive","ParentPredictive",names(pain)[37:44])]
+k_diff <- kmeans(p_diff, centers = 3)
+k_diff
+```
+```{r}
+data = t(matrix(k_diff$centers[,9:15], byrow=F, nrow=3))
+matplot(data, type = "l", col = c(1,2,4), xlab = "Hours", ylab = "Pain Diff")
+legend("topleft", legend = 1:3, col=c(1,2,4), pch=1)
+```
+## t-tests among clusters
+```{r}
+c1 = pain[k_diff$cluster == 1,]
+c2 = pain[k_diff$cluster == 2,]
+c3 = pain[k_diff$cluster == 3,]
+t.test(c1$PatientWeight, c2$PatientWeight)
+t.test(c1$PatientWeight, c3$PatientWeight)
+t.test(c2$PatientWeight, c3$PatientWeight)
+t.test(c1$PatientAge, c2$PatientAge)
+t.test(c1$PatientAge, c3$PatientAge)
+t.test(c2$PatientAge, c3$PatientAge)
+t.test(c1$PatientPredictive, c2$PatientPredictive)
+t.test(c1$PatientPredictive, c3$PatientPredictive)
+t.test(c2$PatientPredictive, c3$PatientPredictive)
+t.test(c1$ParentPredictive, c2$ParentPredictive)
+t.test(c1$ParentPredictive, c3$ParentPredictive)
+t.test(c2$ParentPredictive, c3$ParentPredictive)
+```
+
+
+## KNN, Elastic Net and Random Forest
 ```{r}
 set.seed(2018)
 ```
@@ -169,16 +504,13 @@ get_best_result = function(caret_fit) {
   rownames(best_result) = NULL
   best_result
 }
-
 #set up accuracy functions
 accuracy = function(actual, predicted){
   mean(actual - sd(actual) < predicted & predicted < actual + sd(actual))
 }
-
 #use 5-fold cross validation
 cv_5 = trainControl(method = "cv", number = 5)
 ```
-
 
 ```{r}
 #get best result
@@ -203,17 +535,18 @@ pain_knn = train(
   method = "knn",
   trControl = cv_5,
   #choose 34 numbers to be the number of neighbors for KNN model, and it is the largest number we can pick
-  tuneGrid = expand.grid(k = seq(1, 30, by = 1))
+  tuneGrid = expand.grid(k = seq(1, 25, by = 1))
 )
-
 ```
-
 
 ```{r}
 knn_best = get_best_result(pain_knn)
 knn_best
 ```
 
+```{r}
+knn_best[1, 2]
+```
 
 
 ```{r}
@@ -227,7 +560,6 @@ knn_acc = accuracy(actual = pain_test$mean_absChange_MeanPainScore,
                    predicted = predict(pain_knn, pain_test))
 knn_acc
 ```
-
 
 ### Elastic Net Model
 
@@ -257,16 +589,7 @@ elastic_acc
 ```
 
 
-
-
-## Tree (T)
-
 ### Random Forest 
-
-```{r}
-#random forest
-library(randomForest)
-```
 
 ```{r}
 oob = trainControl(method = "oob")
@@ -295,15 +618,8 @@ rf_acc
 ```
 
 ```{r}
+# output a table of results for Random Forest model
 #maybe not needed
-#rf = pain_rf$results
-#knitr::kable(rf)
+rf = pain_rf$results
+knitr::kable(rf)
 ```
-
-|       Method     |Tuning Parameter|     Parameter Value   |      RMSE    |   Test Accuracy   |
-|------------------|----------------|-----------------------|-----------------------|-------------------|
-|`KNN` |     "k"        |   `r knn_best[1, 1]`  |  `r knn_best[1, 2]`   |    `r knn_acc`    |
-|`Elastic Net` |    "alpha"     |`r elastic_best[1, 1]` | `r elastic_best[1, 3]`|   `r elastic_acc` |
-|                  |    "lambda"    |`r elastic_best[1, 2]` |                       |                   |
-|`Random Forest` |    "mtry"      |   `r rf_best[1, 3]`   |  `r rf_best[1, 1]`    |    `r rf_acc`     |
-
