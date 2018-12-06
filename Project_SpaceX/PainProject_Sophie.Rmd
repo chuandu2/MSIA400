@@ -1,0 +1,309 @@
+---
+title: "400_Project"
+author: "Chuan Du (Sophie)"
+date: "11/13/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Load Data
+
+```{r}
+#read in data
+raw = read.csv('SurgicalRegistry.csv')
+```
+
+### Data Cleansing
+
+```{r}
+# replace all 999 and 777 with NA
+raw[raw == 999 | raw == 777] <- NA
+
+# change columns to factors
+colsFactors <- c("PatientGender", "PatientRace", "Genetics", "WhatSurgery", "Surgeon")
+raw[colsFactors] <- lapply(raw[colsFactors], as.factor)
+
+#Remove patients who haven't had surgery
+raw <- raw[-c(12,14),]
+
+#change scale of predictive scores to match reported scores (out of 10)
+raw$PatientPredictive <- raw$PatientPredictive/10
+raw$ParentPredictive <- raw$ParentPredictive/10
+```
+
+```{r}
+#select column names
+pain = raw[,c("Genetics","PatientGender","PatientAge","PatientWeight","PatientRace","WhatSurgery","SurgeryHX","DODPostOpDay","PatientPredictive","ParentPredictive","Hrs0_12MeanPainScore","Hrs13_24MeanPainScore","Hrs25_36MeanPainScore","Hrs37_48MeanPainScore","Hrs49_60MeanPainScore","Hrs61_72MeanPainScore","Hrs73_84MeanPainScore","Hrs85_96MeanPainScore","Hrs0_12MaxPainScore","Hrs13_24MaxPainScore","Hrs25_36MaxPainScore","Hrs37_48MaxPainScore","Hrs49_60MaxPainScore","Hrs61_72MaxPainScore","Hrs73_84MaxPainScore","Hrs85_96MaxPainScore","Hrs0_12TMorphEquiv","Hrs13_24TMorphEquiv","Hrs25_36TMorphEquiv","Hrs37_48TMorphEquiv","Hrs49_60TMorphEquiv","Hrs61_72TMorphEquiv","Hrs73_84TMorphEquiv","Hrs85_96TMorphEquiv")]
+```
+
+```{r}
+# Replace PatientID 502, 525, 531's self PredicScorest with Median
+## because their original value are 808 and 859; PatientID 502 has missing value
+pain$PatientPredictive[2] <- median(pain$PatientPredictive[-c(22,28)], na.rm=TRUE)
+pain$PatientPredictive[22] <- median(pain$PatientPredictive[-c(22,28)], na.rm=TRUE)
+pain$PatientPredictive[28] <- median(pain$PatientPredictive[-c(22,28)], na.rm=TRUE)
+
+# Replace PatientID 502's Parent PredicScore with Median
+pain$ParentPredictive[2] <- median(pain$ParentPredictive, na.rm=TRUE)
+```
+
+```{r}
+# Replace missing value in MeanPainScore using MeanPainScore from other time windows
+pain[8,]$Hrs13_24MeanPainScore <- mean(c(pain[8,]$Hrs0_12MeanPainScore, pain[8,]$Hrs25_36MeanPainScore))
+
+pain[46,]$Hrs13_24MeanPainScore <- mean(c(pain[46,]$Hrs0_12MeanPainScore,pain[46,]$Hrs25_36MeanPainScore))
+pain[31,]$Hrs73_84MeanPainScore <-mean(c(pain[31,]$Hrs61_72MeanPainScore,pain[31,]$Hrs85_96MeanPainScore))
+
+##[16,] Hrs85_96.OfPainScore = 0
+pain[16,]$Hrs85_96MeanPainScore <- 0
+
+##[22,]Hrs73_84.OfPainScores = 0
+pain[22,]$Hrs85_96MeanPainScore <- 0
+pain[22,]$Hrs73_84MeanPainScore <- 0
+
+pain[61,]$Hrs61_72MeanPainScore <- pain[61,]$Hrs49_60MeanPainScore - 1/3 *(pain[61,]$Hrs49_60MeanPainScore - pain[61,]$Hrs85_96MeanPainScore)
+pain[61,]$Hrs73_84MeanPainScore <-pain[61,]$Hrs49_60MeanPainScore - 2/3 *(pain[61,]$Hrs49_60MeanPainScore - pain[61,]$Hrs85_96MeanPainScore)
+
+# Replace missing value in MaxPainScore primarily using MaxPainScore from other time windows
+
+pain[8,]$Hrs13_24MaxPainScore <- mean(c(pain[8,]$Hrs0_12MaxPainScore, pain[8,]$Hrs25_36MaxPainScore))
+
+pain[31,]$Hrs73_84MaxPainScore <- mean(c(pain[31,]$Hrs61_72MaxPainScore, pain[31,]$Hrs85_96MaxPainScore))
+
+##[16,] Hrs85_96.OfPainScore = 0
+pain[16,]$Hrs85_96MaxPainScore <- 0
+
+##[22,]Hrs73_84.OfPainScores = 0
+pain[22,]$Hrs73_84MaxPainScore <- 0
+pain[22,]$Hrs85_96MaxPainScore <- 0
+
+
+## pain[8,]$Hrs49_60MaxPainScore = Hrs85_96MaxPainScore =1
+pain[61,]$Hrs61_72MaxPainScore <- 1
+pain[61,]$Hrs73_84MaxPainScore <- 1
+
+## pain[24,]$Hrs85_96MinPainScore = Hrs85_96MeanPainScore =3
+pain[24,]$Hrs85_96MaxPainScore <- 3
+
+# Remove patient ID 43 46
+## empty Pain Score data
+pain <- pain [-c(41,44),]
+
+#change pain scores to change over previous value
+
+# create relative mean pain score change
+pain$Hrs0_12MeanPainScore_change <- 0
+pain$Hrs13_24MeanPainScore_change <- pain$Hrs13_24MeanPainScore - pain$Hrs0_12MeanPainScore
+pain$Hrs25_36MeanPainScore_change <- pain$Hrs25_36MeanPainScore - pain$Hrs13_24MeanPainScore  
+pain$Hrs37_48MeanPainScore_change <- pain$Hrs37_48MeanPainScore - pain$Hrs25_36MeanPainScore  
+pain$Hrs49_60MeanPainScore_change <- pain$Hrs49_60MeanPainScore - pain$Hrs37_48MeanPainScore  
+pain$Hrs61_72MeanPainScore_change <- pain$Hrs61_72MeanPainScore - pain$Hrs49_60MeanPainScore  
+pain$Hrs73_84MeanPainScore_change <- pain$Hrs73_84MeanPainScore - pain$Hrs61_72MeanPainScore  
+pain$Hrs85_96MeanPainScore_change <- pain$Hrs85_96MeanPainScore - pain$Hrs73_84MeanPainScore  
+
+# create relative max pain score change
+pain$Hrs0_12MaxPainScore_change <- 0
+pain$Hrs13_24MaxPainScore_change <- pain$Hrs13_24MaxPainScore - pain$Hrs0_12MaxPainScore
+pain$Hrs25_36MaxPainScore_change <- pain$Hrs25_36MaxPainScore - pain$Hrs13_24MaxPainScore  
+pain$Hrs37_48MaxPainScore_change <- pain$Hrs37_48MaxPainScore - pain$Hrs25_36MaxPainScore  
+pain$Hrs49_60MaxPainScore_change <- pain$Hrs49_60MaxPainScore - pain$Hrs37_48MaxPainScore  
+pain$Hrs61_72MaxPainScore_change <- pain$Hrs61_72MaxPainScore - pain$Hrs49_60MaxPainScore  
+pain$Hrs73_84MaxPainScore_change <- pain$Hrs73_84MaxPainScore - pain$Hrs61_72MaxPainScore  
+pain$Hrs85_96MaxPainScore_change <- pain$Hrs85_96MaxPainScore - pain$Hrs73_84MaxPainScore
+
+# create relative morphine change
+pain$Hrs0_12TMorphEquiv_change <- 0
+pain$Hrs13_24TMorphEquiv_change <- pain$Hrs13_24TMorphEquiv - pain$Hrs0_12TMorphEquiv
+pain$Hrs25_36TMorphEquiv_change <- pain$Hrs25_36TMorphEquiv - pain$Hrs13_24TMorphEquiv  
+pain$Hrs37_48TMorphEquiv_change <- pain$Hrs37_48TMorphEquiv - pain$Hrs25_36TMorphEquiv  
+pain$Hrs49_60TMorphEquiv_change <- pain$Hrs49_60TMorphEquiv - pain$Hrs37_48TMorphEquiv  
+pain$Hrs61_72TMorphEquiv_change <- pain$Hrs61_72TMorphEquiv - pain$Hrs49_60TMorphEquiv  
+pain$Hrs73_84TMorphEquiv_change <- pain$Hrs73_84TMorphEquiv - pain$Hrs61_72TMorphEquiv  
+pain$Hrs85_96TMorphEquiv_change <- pain$Hrs85_96TMorphEquiv - pain$Hrs73_84TMorphEquiv
+
+# Average change in pain score per patient
+pain_change_times1 <- c( "Hrs13_24MeanPainScore_change","Hrs25_36MeanPainScore_change","Hrs37_48MeanPainScore_change","Hrs49_60MeanPainScore_change", "Hrs61_72MeanPainScore_change","Hrs73_84MeanPainScore_change","Hrs85_96MeanPainScore_change")
+
+pain$mean_change_MeanPainScore <- apply(pain[pain_change_times1], 1, mean, na.rm=TRUE)
+
+
+# ABS change in pain score per patient
+pain$mean_absChange_MeanPainScore <- apply(pain[pain_change_times1], 1, function(x) mean(abs(x),na.rm = T))
+
+```
+
+```{r}
+library(readr)
+library(ISLR)
+library(class)
+library(caret)
+library(FNN)
+library(randomForest)
+library(glmnet)
+library(e1071)
+library(nnet)
+library(MASS)
+library(survival)
+```
+
+
+```{r}
+set.seed(2018)
+```
+
+```{r}
+pain_idx = sample(1:nrow(pain), size = round(0.7 * nrow(pain)))
+pain_train = pain[pain_idx, ]
+pain_test = pain[-pain_idx, ]
+```
+
+```{r}
+# define functions for later use
+#get best result
+get_best_result = function(caret_fit) {
+  best = which(rownames(caret_fit$results) == rownames(caret_fit$bestTune))
+  best_result = caret_fit$results[best, ]
+  rownames(best_result) = NULL
+  best_result
+}
+
+#set up accuracy functions
+accuracy = function(actual, predicted){
+  mean(actual - sd(actual) < predicted & predicted < actual + sd(actual))
+}
+
+#use 5-fold cross validation
+cv_5 = trainControl(method = "cv", number = 5)
+```
+
+
+```{r}
+#get best result
+get_best_result = function(caret_fit) {
+  best = which(rownames(caret_fit$results) == rownames(caret_fit$bestTune))
+  best_result = caret_fit$results[best, ]
+  rownames(best_result) = NULL
+  best_result
+}
+```
+
+### K-Nearest Neighbors Model
+
+```{r}
+#knn
+set.seed(400)
+pain_knn = train(
+  #try full model
+  mean_absChange_MeanPainScore ~ PatientGender + PatientRace + Genetics + WhatSurgery
+  + PatientAge + PatientWeight,
+  data = pain_train,
+  method = "knn",
+  trControl = cv_5,
+  #choose 34 numbers to be the number of neighbors for KNN model, and it is the largest number we can pick
+  tuneGrid = expand.grid(k = seq(1, 30, by = 1))
+)
+
+```
+
+
+```{r}
+knn_best = get_best_result(pain_knn)
+knn_best
+```
+
+
+
+```{r}
+ncluster = nrow(pain) / knn_best$k
+ncluster
+```
+
+```{r}
+#test accuracy
+knn_acc = accuracy(actual = pain_test$mean_absChange_MeanPainScore,
+                   predicted = predict(pain_knn, pain_test))
+knn_acc
+```
+
+
+### Elastic Net Model
+
+Instead of using logistic regression without regularization, the elastic net model is considered to reduce risk of overfitting. 
+
+```{r}
+#fitting linear model, a regularized method that linearly combines penalties of lasso and ridge
+pain_elastic = train(
+  mean_absChange_MeanPainScore ~ PatientGender + PatientRace + Genetics + 
+    WhatSurgery + PatientAge + PatientWeight,
+  data = pain_train,
+  method = "glmnet",
+  trControl = cv_5,
+  tuneLength = 6 #largest we can choose
+  #if larger, if one of the outcome classes has 0 samples, so sensitivity or specificity is underfined and thus NA
+)
+```
+
+```{r}
+elastic_best = get_best_result(pain_elastic); elastic_best
+```
+
+```{r}
+elastic_acc = accuracy(actual = pain_test$mean_absChange_MeanPainScore,
+                       predicted = predict(pain_elastic, pain_test))
+elastic_acc
+```
+
+
+
+
+## Tree (T)
+
+### Random Forest 
+
+```{r}
+#random forest
+library(randomForest)
+```
+
+```{r}
+oob = trainControl(method = "oob")
+#set.seed(2018)
+pain_rf = train(
+  mean_absChange_MeanPainScore ~ PatientGender + PatientRace + Genetics + 
+    WhatSurgery + PatientAge + PatientWeight,
+  data = pain_train,
+  method = "rf",
+  metric = "RMSE",
+  trControl = oob,
+  tuneGrid = expand.grid(.mtry = seq(1, 5, 0.2))
+)
+```
+
+```{r}
+rf_best = get_best_result(pain_rf)
+rf_best
+```
+
+
+```{r}
+rf_acc = accuracy(actual = pain_test$mean_absChange_MeanPainScore,
+                  predicted = predict(pain_rf, pain_test))
+rf_acc
+```
+
+```{r}
+#maybe not needed
+#rf = pain_rf$results
+#knitr::kable(rf)
+```
+
+|       Method     |Tuning Parameter|     Parameter Value   |      RMSE    |   Test Accuracy   |
+|------------------|----------------|-----------------------|-----------------------|-------------------|
+|`KNN` |     "k"        |   `r knn_best[1, 1]`  |  `r knn_best[1, 2]`   |    `r knn_acc`    |
+|`Elastic Net` |    "alpha"     |`r elastic_best[1, 1]` | `r elastic_best[1, 3]`|   `r elastic_acc` |
+|                  |    "lambda"    |`r elastic_best[1, 2]` |                       |                   |
+|`Random Forest` |    "mtry"      |   `r rf_best[1, 3]`   |  `r rf_best[1, 1]`    |    `r rf_acc`     |
+
